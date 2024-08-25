@@ -20,28 +20,31 @@ years = st.sidebar.slider('Número de años', min_value=1, max_value=100, step=1
 simulations = st.sidebar.number_input('Número de simulaciones', 1, 10000, 1, 1)
 
 
-def simulate_portfolio(contr,avg_pi,period,num_sims):
+def simulate_portfolio(contr, avg_pi, period, num_sims):
     # Checkbox para activar o desactivar la inflación
     apply_inflation = st.sidebar.checkbox('Aplicar ajuste inflacionario', value=True)
-
+    
     # Inicialización de las listas para guardar resultados
     final_cap = []
     all_portfolios = []
     distr_inflation = []
     contributions = []
+    inflation_adjusted_line = []
 
     # Simulaciones
-    for sim in range(num_sims): 
+    for sim in range(num_sims):
         portfolio_value = [1000]  # Valor inicial de la cartera
-        inflation = np.random.normal(avg_pi/100, 0.0124, period) # Inflación anual
-        series = np.random.normal(0.008735, 0.044052, 12 * period) # Retorno anual mensualizado           
+        inflation = np.random.normal(avg_pi / 100, 0.0124, period)  # Inflación anual
+        series = np.random.normal(0.008735, 0.044052, 12 * period)  # Retorno anual mensualizado
         y = 0
         adjusted = []
         rate = 0
         distr_inflation.extend(inflation)
         total_contributed = [1000]
+        inflation_adjusted_value = [1000]  # Track the inflation-adjusted value without investment
+
         # Monthly iteration
-        for r in range(0,len(series)):
+        for r in range(0, len(series)):
             # Updating contribution
             if r == 0:
                 contribution = contr
@@ -50,34 +53,46 @@ def simulate_portfolio(contr,avg_pi,period,num_sims):
                 contribution *= (1 + rate)
                 y += 1
             # Updates real return series
-            adjusted.append(series[r] - ((1 + rate)**(1/12) - 1))
-            total_contributed.append(contribution)   
+            adjusted.append(series[r] - ((1 + rate) ** (1 / 12) - 1))
+            total_contributed.append(contribution)
 
+            # Calculate the new portfolio value with investment
             if apply_inflation:
                 new_value = contribution + portfolio_value[r] * (1 + adjusted[r])
             else:
                 new_value = contribution + portfolio_value[r] * (1 + series[r])
 
             portfolio_value.append(new_value)
-            last_contribution = contribution
+
+            # Calculate the inflation-adjusted value without investment
+            new_inflation_adjusted_value = inflation_adjusted_value[-1] + contribution
+            inflation_adjusted_value.append(new_inflation_adjusted_value)
+
         contributions.append(total_contributed)
         final_cap.append(new_value)
         all_portfolios.append(portfolio_value)
+
+        if apply_inflation:
+            inflation_adjusted_line.append(inflation_adjusted_value)
 
     # Calcular la curva de Gauss para la distribución de la inflación
     mu, std = avg_pi / 100, 0.0124
     xmin, xmax = np.min(distr_inflation), np.max(distr_inflation)
     x = np.linspace(xmin, xmax, 100)
     p = stats.norm.pdf(x, mu, std)
-    
-    return final_cap, all_portfolios, last_contribution, distr_inflation, x, p
 
-final_cap, all_portfolios, last_contribution, distr_inflation, x, p = simulate_portfolio(contribution,avg_inflation,years,simulations)
+    return final_cap, all_portfolios, last_contribution, distr_inflation, x, p, inflation_adjusted_line
+
+final_cap, all_portfolios, last_contribution, distr_inflation, x, p, inflation_adjusted_line = simulate_portfolio(contribution, avg_inflation, years, simulations)
 
 # Gráfico de la evolución de la cartera
-plt.figure(figsize=(10,6))
+plt.figure(figsize=(10, 6))
 for portfolio in all_portfolios:
-    plt.plot(portfolio)
+    plt.plot(portfolio, color='blue', alpha=0.3)  # Plot each simulated portfolio
+
+# Plot the inflation-adjusted contributions line if selected
+if inflation_adjusted_line:
+    plt.plot(np.mean(inflation_adjusted_line, axis=0), color='black', linewidth=2, label='Capital inicial + contribuciones indexadas')
 
 # Mostrar estadísticas
 mediana_capital = np.median(final_cap)
@@ -90,6 +105,7 @@ st.write(f"**Promedio de correlación entre las simulaciones:** {np.mean(np.corr
 plt.title(f'Evolución de la Cartera en {years} Año/s (Contribución mensual final de {"{:,.2f}€".format(last_contribution)})')
 plt.xlabel('Meses')
 plt.ylabel('Valor de la Cartera (€ en valor presente)')
+plt.legend()
 st.pyplot(plt)
 
 # Histograma de la distribución de la inflación
@@ -98,7 +114,7 @@ count, bins, ignored = plt.hist(distr_inflation, bins=15, density=True, alpha=0.
 
 # Dibujar la curva de Gauss sobre el histograma
 plt.plot(x, p, 'k', linewidth=2)
-title = f'Distribución de la inflación en simulaciones\n$\mu={avg_inflation:.2f}$%, $\sigma={0.0124*100:.2f}$%'
+title = f'Distribución de la inflación en simulaciones\n$\mu={avg_inflation:.2f}$%, $\sigma={0.0124 * 100:.2f}$%'
 plt.title(title)
 plt.xlabel('Tasa de inflación')
 plt.ylabel('Frecuencia')
