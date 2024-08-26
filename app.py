@@ -4,9 +4,25 @@ import matplotlib.pyplot as plt
 import scipy.stats as stats
 
 # Configuración de la página de Streamlit
-st.title("Simulación de Evolución de Cartera con DCA en el S&P 500")
+st.title("Simulación de Evolución de Cartera con DCA (Dollar Cost Averaging) en el S&P 500 :chart:")
 
-st.write('''En esta simulación hemos utilizado el retorno medio anual compuesto del S&P500 de los últimos 35 años 
+with st.expander('🛠️ Guía de Uso'):
+    # Guía de uso
+    st.markdown("""
+    Esta aplicación te permite simular la evolución de una cartera de inversión en el S&P 500 utilizando la estrategia de DCA (Dollar Cost Averaging). A continuación te explico cómo utilizarla:
+
+    1. **Contribución mensual (€):** Ajusta el monto que deseas aportar mensualmente a tu cartera.
+    2. **Inflación anual (%):** Configura la tasa de inflación esperada. Puedes optar por aplicar este ajuste inflacionario o no.
+    3. **Número de años:** Selecciona el periodo durante el cual deseas realizar la simulación.
+    4. **Número de simulaciones:** Indica cuántas simulaciones deseas ejecutar para ver la variabilidad de los resultados.
+    5. **Aplicar ajuste inflacionario:** Puedes optar por aplicar un ajuste por inflación a tus contribuciones anuales.
+    6. **Lanzar simulación:** Haz clic en este botón para ejecutar la simulación con los parámetros seleccionados.
+
+    Los resultados mostrarán tanto el valor nominal como el valor ajustado por inflación de tu cartera a lo largo del tiempo. También podrás ver un histograma con la distribución de las tasas de inflación observadas durante las simulaciones.
+
+    """)
+
+st.write('''En esta simulación he utilizado el retorno medio anual compuesto del S&P500 de los últimos 35 años 
          de acuerdo con TradingView (11% anual) así como la volatilidad observada para el mismo periodo (15,26% de desviación típica.)
          Existe la opción de descontar el impacto de la inflación esperada. Los bancos centrales establecen el objetivo en el 2% anual,
          aunque nosotros por defecto aplicamos un 2,42% que ha sido el valor medio para los últimos 20 años en los EEUU, y una desviación típica de 1,24%. Puedes modificar este dato a tu gusto. 
@@ -14,11 +30,10 @@ st.write('''En esta simulación hemos utilizado el retorno medio anual compuesto
             ''')
 
 # Controles deslizantes para ajustar los parámetros
-contribution = st.sidebar.slider('Contribución mensual (€)', min_value=0, max_value=1000, step=50)
-avg_inflation = st.sidebar.slider('Inflación anual (%)', min_value=0.0, max_value=10.0, value=2.42, step=0.1)
+contribution = st.sidebar.slider('Contribución mensual (€)', min_value=0, max_value=10000, step=50)
+avg_inflation = st.sidebar.slider('Inflación anual (%)', min_value=0.0, max_value=20.0, value=2.42, step=0.1)
 years = st.sidebar.slider('Número de años', min_value=1, max_value=100, step=1)
 simulations = st.sidebar.number_input('Número de simulaciones', 1, 10000, 1, 1)
-
 
 def simulate_portfolio(contr, avg_pi, period, num_sims):
     # Checkbox para activar o desactivar la inflación
@@ -30,6 +45,7 @@ def simulate_portfolio(contr, avg_pi, period, num_sims):
     distr_inflation = []
     contributions = []
     inflation_adjusted_line = []
+    all_npv_portfolios = []
 
     # Simulaciones
     for sim in range(num_sims):
@@ -73,6 +89,18 @@ def simulate_portfolio(contr, avg_pi, period, num_sims):
         final_cap.append(new_value)
         all_portfolios.append(portfolio_value)
 
+        # Calculating NPV where year 0 = 100
+        acc_inflation = [1]  # Start with 1 (no inflation impact in year 0)
+        for i in range(1, period):
+            acc_inflation.append(acc_inflation[-1] * (1 + inflation[i]))
+
+        # Stretch the accumulated inflation to the monthly granularity
+        acc_inflation_monthly = np.repeat(acc_inflation, 12)
+
+        # Calculate NPV using the adjusted inflation and portfolio values
+        npv_portfolio = [np.log(portfolio_value[i] / acc_inflation_monthly[i // 12]) for i in range(len(portfolio_value))]
+        all_npv_portfolios.append(npv_portfolio)
+
         if apply_inflation:
             inflation_adjusted_line.append(inflation_adjusted_value)
 
@@ -82,43 +110,82 @@ def simulate_portfolio(contr, avg_pi, period, num_sims):
     x = np.linspace(xmin, xmax, 100)
     p = stats.norm.pdf(x, mu, std)
 
-    return final_cap, all_portfolios, last_contribution, distr_inflation, x, p, inflation_adjusted_line
+    return final_cap, all_portfolios, last_contribution, distr_inflation, x, p, inflation_adjusted_line, all_npv_portfolios
 
-final_cap, all_portfolios, last_contribution, distr_inflation, x, p, inflation_adjusted_line = simulate_portfolio(contribution, avg_inflation, years, simulations)
+final_cap, all_portfolios, last_contribution, distr_inflation, x, p, inflation_adjusted_line, all_npv_portfolios = simulate_portfolio(contribution, avg_inflation, years, simulations)
 
-# Gráfico de la evolución de la cartera
-plt.figure(figsize=(10, 6))
-for portfolio in all_portfolios:
-    plt.plot(portfolio, color='blue', alpha=0.3)  # Plot each simulated portfolio
+button = st.sidebar.button('Lanzar simulación')
 
-# Plot the inflation-adjusted contributions line if selected
-if inflation_adjusted_line:
-    plt.plot(np.mean(inflation_adjusted_line, axis=0), color='black', linewidth=2, label='Capital inicial + contribuciones indexadas')
+if button:
+    # Gráfico de la evolución de la cartera
+    plt.figure(figsize=(10, 6))
+    for portfolio in all_portfolios:
+        plt.plot(portfolio)  # Plot each simulated portfolio
 
-# Mostrar estadísticas
-mediana_capital = np.median(final_cap)
-media_capital = np.mean(final_cap)
-st.write(f"**Mediana del capital final después de {years} año/s:** {mediana_capital:,.2f}€")
-st.write(f"**Media del capital final después de {years} año/s:** {media_capital:,.2f}€")
-st.write(f"**Promedio de correlación entre las simulaciones:** {np.mean(np.corrcoef(all_portfolios)):.4f}")
+    # Plot the inflation-adjusted contributions line if selected
+    if inflation_adjusted_line:
+        plt.plot(np.mean(inflation_adjusted_line, axis=0), color='black', linewidth=2, label='Capital inicial + contribuciones indexadas')
 
-# Mostrar gráfico de evolución de la cartera
-plt.title(f'Evolución de la Cartera en {years} Año/s (Contribución mensual final de {"{:,.2f}€".format(last_contribution)})')
-plt.xlabel('Meses')
-plt.ylabel('Valor de la Cartera (€ en valor presente)')
-plt.legend()
-st.pyplot(plt)
+    # Mostrar estadísticas
+    mediana_capital = np.median(final_cap)
+    media_capital = np.mean(final_cap)
+    st.write(f"**Mediana del capital final después de {years} año/s:** {mediana_capital:,.2f}€")
+    st.write(f"**Media del capital final después de {years} año/s:** {media_capital:,.2f}€")
+    st.write(f"**Promedio de correlación entre las simulaciones:** {np.mean(np.corrcoef(all_portfolios)):.4f}")
 
-# Histograma de la distribución de la inflación
-plt.figure(figsize=(10, 6))
-count, bins, ignored = plt.hist(distr_inflation, bins=15, density=True, alpha=0.6, color='g')
+    # Mostrar gráfico de evolución de la cartera
+    plt.title(f'Valor nominal de la Cartera en {years} Año/s (Contribución mensual final de {"{:,.2f}€".format(last_contribution)})')
+    plt.xlabel('Meses')
+    plt.ylabel('Valor de la Cartera (€)')
+    plt.legend()
+    st.pyplot(plt)
 
-# Dibujar la curva de Gauss sobre el histograma
-plt.plot(x, p, 'k', linewidth=2)
-title = f'Distribución de la inflación en simulaciones\n$\mu={avg_inflation:.2f}$%, $\sigma={0.0124 * 100:.2f}$%'
-plt.title(title)
-plt.xlabel('Tasa de inflación')
-plt.ylabel('Frecuencia')
+    st.write('La linea negra representa la evolución de tu capital de no estar invertido. Por lo tanto, si las lineas de simulación se encuentran por encima de la negra, hemos observado un retorno real sobre la inversión positivo. Dado que el retorno nominal del S&P500 tiene la media establecida en el 11%, prueba subir la inflación por encima de este valor para ver como el retorno real se vuelve negativo. (Simulaciones por debajo de la linea negra)')
+    st.write('Retorno real = Retorno Nominal - Inflación')
+    st.write('Bajo se encuentra la evolución del capital en Logaritmos y la distribución de tasas de inflación observadas. ')
+    # Gráfico de la evolución de la cartera
+    plt.figure(figsize=(10, 6))
+    for portfolio in all_portfolios:
+        plt.plot(np.log(portfolio))  # Plot each simulated portfolio
 
-# Mostrar el gráfico del histograma en Streamlit
-st.pyplot(plt)
+    # Plot the inflation-adjusted contributions line if selected
+    if inflation_adjusted_line:
+        plt.plot(np.mean(np.log(inflation_adjusted_line), axis=0), color='black', linewidth=2, label='Capital inicial + contribuciones indexadas')
+
+    plt.title(f'Valor de la Cartera en {years} Año/s (Logs)')
+    plt.xlabel('Meses')
+    plt.ylabel('Valor de la Cartera en Logs')
+    st.pyplot(plt)
+
+
+    # Histograma de la distribución de la inflación
+    plt.figure(figsize=(10, 6))
+    count, bins, ignored = plt.hist(distr_inflation, bins=15, density=True, alpha=0.6, color='g')
+
+    # Dibujar la curva de Gauss sobre el histograma
+    plt.plot(x, p, 'k', linewidth=2)
+    title = f'Distribución de la inflación en simulaciones\n$\mu={avg_inflation:.2f}$%, $\sigma={0.0124 * 100:.2f}$%'
+    plt.title(title)
+    plt.xlabel('Tasa de inflación')
+    plt.ylabel('Frecuencia')
+
+    # Mostrar el gráfico del histograma en Streamlit
+    st.pyplot(plt)
+
+# Sidebar Contact Information
+st.sidebar.markdown("### Contact & Support")
+st.sidebar.markdown("""
+- 🐦 [Twitter](https://twitter.com/_paugbp)
+- 💼 [LinkedIn](https://www.linkedin.com/in/paugb/)
+- ☕️ [Buy Me a Coffee](https://buymeacoffee.com/paugb?new=1)
+""")
+
+# Social Media and Contact Information
+st.markdown("""
+**Contact Me & Support**  
+Feel free to reach out to me on my social networks or buy me a coffee if you enjoy this app! ☕️
+
+- 🐦 **Twitter**: [@_Paugbp](https://twitter.com/_paugbp)
+- 💼 **LinkedIn**: [Paugb](https://linkedin.com/in/paugb)
+- ☕️ **[Buy Me a Coffee](https://buymeacoffee.com/paugb?new=1)**  
+""")
