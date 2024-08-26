@@ -63,6 +63,7 @@ def simulate_portfolio(contr, avg_pi, period, num_sims):
                 new_value = contribution + portfolio_value[r] * (1 + series[r])
 
             portfolio_value.append(new_value)
+            last_contribution = contribution
 
             # Calculate the inflation-adjusted value without investment
             new_inflation_adjusted_value = inflation_adjusted_value[-1] + contribution
