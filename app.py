@@ -33,7 +33,7 @@ st.write('''En esta simulación he utilizado el retorno medio anual compuesto de
 contribution = st.sidebar.slider('Contribución mensual (€)', min_value=0, max_value=10000, step=50)
 avg_inflation = st.sidebar.slider('Inflación anual (%)', min_value=0.0, max_value=20.0, value=2.42, step=0.1)
 years = st.sidebar.slider('Número de años', min_value=1, max_value=100, step=1)
-simulations = st.sidebar.number_input('Número de simulaciones', 1, 10000, 1, 1)
+simulations = st.sidebar.number_input('Número de simulaciones', 1, 10000, value=5, step=1)
 
 def simulate_portfolio(contr, avg_pi, period, num_sims):
     # Checkbox para activar o desactivar la inflación
